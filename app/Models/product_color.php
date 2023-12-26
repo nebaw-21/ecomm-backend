@@ -13,7 +13,7 @@ class product_color extends Model
     
     use HasFactory;
 protected $fillable = [
-    'colorId', 'productId'
+    'colorId', 'productId','published'
 ];
 
 public function category():BelongsTo {

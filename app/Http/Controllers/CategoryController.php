@@ -31,8 +31,44 @@ class CategoryController extends Controller
         return response()->json(['success'], 200);
     }
     
+    public function updateCategory(Request $request, $id)
+    {
+        $validator = Validator::make($request->all(), [
+            'category' => 'required',
+            'image' =>'required',
+        ]);
+    
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+    
+        $category = Category::find($id);
+        if (!$category) {
+            return response()->json(['error' => 'Category not found'], 404);
+        }
+    
+        $category->category = $request->input('category');
+    
+        if ($request->hasFile('image')) {
+            // Delete the previous image if needed
+            Storage::delete($category->image);
+    
+            $category->image = $request->file('image')->store('productImages');
+        }
+    
+        $category->save();
+    
+        return response()->json(['success'], 200);
+    }
+
     public function displayCategory()
     {
         return Category::all();
     }
+
+    public function displaySpecificCategory($id)
+    {
+        return Category::find($id);
+    }
+
 }

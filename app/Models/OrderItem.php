@@ -19,7 +19,7 @@ class OrderItem extends Model
         "color",
         "price",
         "image",
-
+        "payment",
     ];
     
     public function product():BelongsTo{

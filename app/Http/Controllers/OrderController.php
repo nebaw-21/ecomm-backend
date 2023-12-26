@@ -23,7 +23,6 @@ class OrderController extends Controller
             'items.*.product_id' => 'required|exists:products,id',
             'items.*.quantity' => 'required|integer|min:1',
             'items.*.name' => 'required',
-            'items.*.color' => 'required',
             'items.*.image' => 'required',
             'items.*.price' => 'required',
         ]);
@@ -99,8 +98,8 @@ class OrderController extends Controller
     }
     public function displayAllOrder()
     {
-        $orders = Order::all();
-    
+        $orders = Order::orderBy('created_at', 'desc')->get();
+        
         $orderData = [];
     
         foreach ($orders as $order) {
@@ -115,12 +114,13 @@ class OrderController extends Controller
                 'orderDate' => $orderDate,
                 'status' => $status,
                 'name' => $name,
-                'lname'=>$lname,
+                'lname' => $lname,
             ];
         }
     
         return $orderData;
     }
+    
 
     public function orderDetailForAdmin($id)
     {
@@ -135,14 +135,14 @@ class OrderController extends Controller
             $totalPrice = 0; // Variable to store the total price
     
             foreach ($orderItems as $orderItem) {
-                $quantity = $orderItem->quantity;
+                $quantity = intval($orderItem->quantity); // Convert quantity to integer
                 $name = $orderItem->name;
                 $color = $orderItem->color;
                 $size = $orderItem->size;
                 $image = $orderItem->image;
-                $price = $orderItem->price;
-    
-                $totalPrice += floatval($price); // Accumulate the total price
+                $price = floatval($orderItem->price); // Convert price to float
+                $payment= $orderItem->payment;
+                $totalPrice += $price * $quantity; // Multiply price by quantity and accumulate the total price
     
                 $orderItemsData[] = [
                     'quantity' => $quantity,
@@ -150,9 +150,10 @@ class OrderController extends Controller
                     'color' => $color,
                     'size' => $size,
                     'image' => $image,
-                    'price' => $price,
+                    'price' => $price * $quantity, // Multiply price by quantity for each item
                 ];
             }
+    
             $orderId = $order->id;
             $orderDate = $order->created_at;
             $status = $order->status;
@@ -175,11 +176,49 @@ class OrderController extends Controller
                 'city' => $city,
                 'orderItems' => $orderItemsData,
                 'totalPrice' => $totalPrice, // Include the total price in the response data
+                'payment' =>$payment,
             ];
         }
     
         return $orderData;
     }
+    
+
+public function SearchOrder($key = null)
+{
+    $query = Order::query();
+
+    // If $key is provided, filter orders based on the 'fname' or 'lname' of the related user
+    if ($key) {
+        $query->whereHas('user', function ($q) use ($key) {
+            $q->where('fname', 'LIKE', '%' . $key . '%')
+              ->orWhere('lname', 'LIKE', '%' . $key . '%');
+        });
+    }
+
+    $orders = $query->with(['user'])->get();
+
+    $orderData = [];
+
+    foreach ($orders as $order) {
+        $orderId = $order->id;
+        $orderDate = $order->created_at;
+        $status = $order->status;
+        $name = $order->user->fname;
+        $lname = $order->user->lname;
+
+        $orderData[] = [
+            'orderId' => $orderId,
+            'orderDate' => $orderDate,
+            'status' => $status,
+            'name' => $name,
+            'lname' => $lname,
+        ];
+    }
+
+    return $orderData;
+}
+
 
 
 }

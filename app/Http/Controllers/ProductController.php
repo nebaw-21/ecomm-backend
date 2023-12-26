@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Image;
 use App\Models\product_color;
+use App\Models\size;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use App\Models\Product;
@@ -86,7 +88,7 @@ class ProductController extends Controller
                 'selectedCategoryOption' => 'required',
                 'sizeInput' => 'required',
                 'imageInput' => 'required',
-                'is_recommended'=>'required',
+                'is_recommended' => 'required',
             ]);
 
             if ($validator->fails()) {
@@ -137,37 +139,45 @@ class ProductController extends Controller
     }
 
 
+
+    public function displayAllProduct()
+    {
+        $products = product::all();
+        return $products;
+    }
+
+
     public function displayProduct()
     {
         $products = Product::all();
-    
+
         $result = [];
         foreach ($products as $product) {
-             $product->images;
-             $product->sizes;
-            
+            $product->images;
+            $product->sizes;
+
             $colors = $product->colors;
             $colorData = [];
-            if(isset($colors)){
+            if(isset($colors)) {
                 foreach ($colors as $color) {
-                     $color->images->pluck('image')->toArray();
-                     $color->sizes->pluck('size')->toArray();
-        
+                    $color->images->pluck('image')->toArray();
+                    $color->sizes->pluck('size')->toArray();
+
                     $colorData[] = [
                         'colorName' => color::find($color->colorId)->color,
-                
+
                     ];
                 }
 
             }
-    
+
             $result[] = [
                 'product' => $product,
                 'colorData' => $colorData,
 
             ];
         }
-    
+
         return response()->json($result);
     }
 
@@ -175,66 +185,357 @@ class ProductController extends Controller
     {
         $productId = $id;
         $product = Product::find($productId);
-    
+
         if ($product) {
             $product->images;
             $product->sizes;
-    
+
             $colors = $product->colors;
             $colorData = [];
             if (isset($colors)) {
                 foreach ($colors as $color) {
                     $color->images->pluck('image')->toArray();
                     $color->sizes->pluck('size')->toArray();
-    
+
                     $colorData[] = [
                         'colorName' => Color::find($color->colorId)->color,
                         'colorId' => $color->colorId,
                     ];
                 }
             }
-    
+
             $result = [
                 'product' => $product,
                 'colorData' => $colorData,
             ];
-    
+
             return response()->json($result);
         } else {
             return response()->json(['error' => 'Product not found'], 404);
         }
     }
 
-public function displaySpecificCategoryProducts($id){
-    $products = Product::where('categoryId', $id)->get();
-    
-    $result = [];
-    foreach ($products as $product) {
-         $product->images;
-         $product->sizes;
-         $product->category->category;
-        
-        $colors = $product->colors;
-        $colorData = [];
-        if(isset($colors)){
-            foreach ($colors as $color) {
-                 $color->images->pluck('image')->toArray();
-                 $color->sizes->pluck('size')->toArray();
-    
-                $colorData[] = [
-                    'colorName' => color::find($color->colorId)->color,
-            
-                ];
-             
+    public function displaySpecificCategoryProducts($id)
+    {
+        $products = Product::where('categoryId', $id)->get();
+
+        $result = [];
+        foreach ($products as $product) {
+            $product->images;
+            $product->sizes;
+            $product->category->category;
+
+            $colors = $product->colors;
+            $colorData = [];
+            if(isset($colors)) {
+                foreach ($colors as $color) {
+                    $color->images->pluck('image')->toArray();
+                    $color->sizes->pluck('size')->toArray();
+
+                    $colorData[] = [
+                        'colorName' => color::find($color->colorId)->color,
+
+                    ];
+
+                }
+
             }
 
+            $result[] = [
+                'product' => $product,
+                'colorData' => $colorData,
+
+
+            ];
+        }
+
+        return response()->json($result);
+    }
+    public function updateProduct1(Request $request, $id)
+    {
+        
+        $isPublishes = $request->input('SizePublished');
+        
+        $validator = Validator::make($request->all(), [
+            'productName' => 'required',
+            'price' => 'required',
+            'description' => 'required',
+            'selectedCategoryOption' => 'required',
+            'is_recommended' => 'required',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $isPublishes], 422);
+        }
+
+        $product = Product::find($id);
+        if (!$product) {
+            return response()->json(['error' => 'Product not found.'], 404);
+        }
+
+        $product->name = $request->input('productName');
+        $product->price = $request->input('price');
+        $product->categoryId = $request->input('selectedCategoryOption');
+        $product->description = $request->input('description');
+        $product->is_recommended = $request->input('is_recommended');
+
+        // Check if 'isPublished' is provided and update the value
+        if ($request->filled('published')) {
+            $product->published = $request->input('published');
+        }
+
+        if (!$product->save()) {
+            return response()->json(['error' => 'Failed to update the product. Please try again.'], 500);
+        }
+
+        $sizes = $request->input('sizeInput');
+        if (is_array($sizes) && !empty(array_filter($sizes))) {
+            // Update or create sizes
+            foreach ($sizes as $size) {
+                if (!empty($size)) {
+                    $product->sizes()->updateOrCreate(['size' => $size]);
+                }
+            }
+        }
+
+        $sizes = $product->sizes()->get();
+        foreach ($sizes as $index => $size) {
+            $isPublish = isset($isPublishes[$index]) ? $isPublishes[$index] : true;
+            $size->update(['published' => $isPublish]);
+        }
+
+        $selectedImages = $request->file('selectedImages');
+        $selectedIndexes = $request->input('selectedIndexes');
+        $product = Product::find($id);
+
+        if (is_array($selectedImages) && !empty($selectedImages)) {
+            $imagesFromDatabase = $product->images()->get()->toArray();
+
+            foreach ($selectedIndexes as $index => $selectedIndex) {
+                // Validate that the index is within the range of imagesFromDatabase
+                if ($selectedIndex >= 0 && $selectedIndex < count($imagesFromDatabase)) {
+                    $selectedImage = $selectedImages[$index];
+
+                    if ($selectedImage !== null && $selectedImage instanceof UploadedFile && $selectedImage->isValid()) {
+                        $imagePath = $selectedImage->store('productImages');
+                        $existingImageModel = $product->images()->find($imagesFromDatabase[$selectedIndex]['id']);
+
+                        if ($existingImageModel) {
+                            // Update the existing image with the new file path
+                            $existingImageModel->update(['image' => $imagePath]);
+                        }
+                    }
+                } else {
+                    // Handle the case where the selected index is out of range
+                    // You can choose to ignore or log the issue, or handle it accordingly
+                }
+            }
+        }
+
+        //add new image
+        $images = $request->file('imageInput');
+        if (is_array($images) && !empty(array_filter($images))) {
+            foreach ($images as $image) {
+                if ($image instanceof UploadedFile) {
+                    $imagePath = $image->store('productImages');
+                    $product->images()->create([
+                        'image' => $imagePath,
+                    ]);
+                } else {
+                    return response()->json(['error' => 'Invalid image data.'], 422);
+                }
+            }
+        }
+
+        return response()->json(['message' => "you successfully updated your product!!!"], 200);
+    }
+
+
+    public function updateProduct2(Request $request, $productId)
+    {
+        $colors = $request->input('color');
+        $sizes = $request->input('sizes');
+        $images = $request->file('images');
+        $isColorPublished = $request->input('isColorPublished');
+        $publishedSizes = $request->input('isSizePublished');
+    
+        $newColors = $request->input('newColor');
+        $newSizes = $request->input('newSizes');
+        $newImages = $request->file('newImages');
+    
+        // Validate the form data
+        $validator = Validator::make($request->all(), [
+            'productName' => 'required',
+            'price' => 'required',
+            'description' => 'required',
+            'selectedCategoryOption' => 'required',
+            'is_recommended' => 'required',
+        ]);
+    
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+    
+        $product = Product::find($productId);
+    
+        if (!$product) {
+            return response()->json(['error' => 'Product not found.'], 404);
+        }
+    
+        $product->name = $request->input('productName');
+        $product->price = $request->input('price');
+        $product->categoryId = $request->input('selectedCategoryOption');
+        $product->description = $request->input('description');
+        $product->is_recommended = $request->input('is_recommended');
+        // Check if 'isPublished' is provided and update the value
+        if ($request->filled('published')) {
+            $product->published = $request->input('published');
+        }
+    
+        if (!$product->save()) {
+            return response()->json(['error' => 'Failed to update the product. Please try again.'], 500);
+        }
+    
+        foreach ($colors as $colorIndex => $colorChoice) {
+            // Check if the color exists
+            $color = $product->colors()->where('colorId', $colorChoice)->first();
+            
+            if ($color) {
+                // Save changes to the database
+                $color->published = $isColorPublished[$colorIndex];
+                $color->save();
+                // Update sizes for the color
+                $existingSizes = $color->sizes;
+        
+                if (isset($sizes[$colorIndex]) && is_array($sizes[$colorIndex])) {
+                    $sizeData = $sizes[$colorIndex];
+                    foreach ($sizeData as $sizeIndex => $size) {
+                        $sizeModel = $existingSizes->firstWhere('size', $size);
+                
+                        // Assuming $publishedSizes is the array of published values for sizes
+                        $publishedValues = $publishedSizes[$colorIndex] ?? null;
+                
+                        if ($sizeModel) {
+                            // Update existing size
+                            $sizeModel->size = $size;
+                
+                            // Check if the key exists before accessing it
+                            if (isset($publishedValues[$sizeIndex])) {
+                                $sizeModel->published = $publishedValues[$sizeIndex] ?? 0; // Set 'published' value or default to 0
+                            }
+                
+                            $sizeModel->save();
+                        } else {
+                            // Create new size
+                            $color->sizes()->create([
+                                'size' => $size,
+                
+                                // Check if the key exists before accessing it
+                                'published' => $publishedValues[$sizeIndex] ?? 0, // Set 'published' value or default to 0
+                            ]);
+                        }
+                    }
+                }
+                
+                
+        
+                // Update images for the color
+                if (isset($images[$colorIndex]) && is_array($images[$colorIndex])) {
+                    $existingImages = $color->images;
+        
+                    foreach ($images[$colorIndex] as $imageIndex => $image) {
+                        if ($image instanceof UploadedFile) {
+                            $imagePath = $image->store('productImages');
+        
+                            if ($existingImages->count() > $imageIndex) {
+                                // Update existing image
+                                $existingImages[$imageIndex]->image = $imagePath;
+                                $existingImages[$imageIndex]->save();
+                            } else {
+                                // Create new image
+                                $color->images()->create([
+                                    'image' => $imagePath,
+                                ]);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    
+        // Add new colors, images, and sizes
+        if (!empty($newColors)) {
+               // Save colors
+               foreach ($newColors as $colorChoice) {
+                   $color = $product->colors()->create([
+                       'colorId' => $colorChoice,
+                   ]);
+   
+                   // Save sizes
+                   $newSizes = $request->input('newSizes.' . $colorChoice, []);
+                   foreach ($newSizes as $size) {
+                       $color->sizes()->create([
+                           'size' => $size,
+                       ]);
+                   }
+   
+                   // Save images
+                   $newImages = $request->file('newImages.' . $colorChoice, []);
+                   foreach ($newImages as $image) {
+                       if ($image instanceof UploadedFile) {
+                           $imagePath = $image->store('productImages');
+                           $color->images()->create([
+                               'image' => $imagePath,
+                           ]);
+                       } else {
+                           return response()->json(['error' => 'Invalid image data.'], 422);
+                       }
+                   }
+               }
+        }
+    
+        return response()->json(['message' => 'Product updated successfully'], 200);
+    }
+
+
+    function searchProduct($key) {
+        return Product::where('name', 'LIKE', '%' . $key . '%')->get();
+    }
+    public function SearchProductForProductTable($key = null)
+{
+    $query = Product::query();
+
+    // If $key is provided, filter products based on the searchProduct function
+    if ($key) {
+        $searchedProducts = $this->searchProduct($key);
+        $productIds = $searchedProducts->pluck('id');
+        $query->whereIn('id', $productIds);
+    }
+
+    $products = $query->get();
+
+    $result = [];
+    foreach ($products as $product) {
+        $product->images;
+        $product->sizes;
+
+        $colors = $product->colors;
+        $colorData = [];
+        if (isset($colors)) {
+            foreach ($colors as $color) {
+                $color->images->pluck('image')->toArray();
+                $color->sizes->pluck('size')->toArray();
+
+                $colorData[] = [
+                    'colorName' => Color::find($color->colorId)->color,
+
+                ];
+            }
         }
 
         $result[] = [
             'product' => $product,
             'colorData' => $colorData,
-       
-
         ];
     }
 
@@ -242,6 +543,15 @@ public function displaySpecificCategoryProducts($id){
 }
 
 
-}
+
+    }
+
+    
+
+
+
+
+       
+   
 
 
